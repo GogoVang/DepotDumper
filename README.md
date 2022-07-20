@@ -1,7 +1,7 @@
 DepotDownloader
 ===============
 
-Mass depot key dumper utilizing the SteamKit2 library. Supports .NET 5.0
+Mass depot key dumper utilizing the SteamKit2 library. Supports .NET 6.0
 
 Resulting files:
 
