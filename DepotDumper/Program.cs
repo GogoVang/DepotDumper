@@ -247,13 +247,13 @@ namespace DepotDumper
                         depots.Add( depotId );
                     }
 
-                    sw_appnames.WriteLine( "\t{0} - {1}", depotId, depotSection["name"].AsString() );
+                    sw_appnames.WriteLine( "\t{0}", depotId );
 
                     if ( depotSection["manifests"] != KeyValue.Invalid )
                     {
                         foreach ( var branch in depotSection["manifests"].Children )
                         {
-                            sw_appnames.WriteLine( "\t\t{0} - {1}", branch.Name, branch.AsUnsignedLong() );
+                            sw_appnames.WriteLine( "\t\t{0} - {1}", branch.Name, branch["gid"].AsUnsignedLong() );
                         }
                     }
                 }
