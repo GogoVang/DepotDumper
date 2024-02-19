@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.ComponentModel;
@@ -10,40 +10,50 @@ namespace DepotDumper
 {
     class Program
     {
+        public static DumperConfig Config = new();
         private static Steam3Session steam3;
 
         static int Main( string[] args )
         {
-            Console.Write( "Username: " );
-            string user = Console.ReadLine();
-            string password;
+            string user = null;
+            string password = null;
+            Config.UseQrCode = HasParameter( args, "-qr" );
+            Config.RememberPassword = false;
+            Config.TargetAppId = GetParameter<uint>( args, "-app", uint.MaxValue );
+            Config.DumpUnreleased = HasParameter( args, "-dump-unreleased" );
 
-            if ( !string.IsNullOrWhiteSpace( user ) )
+            if ( !Config.UseQrCode )
             {
-                Console.Write( "Password: " );
-                if ( Console.IsInputRedirected )
+                Console.Write( "Username: " );
+                user = Console.ReadLine();
+
+                if ( !string.IsNullOrWhiteSpace( user ) )
                 {
-                    password = Console.ReadLine();
+                    do
+                    {
+                        Console.Write( "Password: " );
+                        if ( Console.IsInputRedirected )
+                        {
+                            password = Console.ReadLine();
+                        }
+                        else
+                        {
+                            // Avoid console echoing of password
+                            password = Util.ReadPassword();
+                        }
+
+                        Console.WriteLine();
+                    } while ( string.Empty == password );
                 }
                 else
                 {
-                    // Avoid console echoing of password
-                    password = Util.ReadPassword();
-                    Console.WriteLine();
+                    // Login anonymously.
+                    user = null;
+                    password = null;
                 }
             }
-            else
-            {
-                // Login anonymously.
-                user = null;
-                password = null;
-            }
 
-            Config.SuppliedPassword = password;
             AccountSettingsStore.LoadFromFile( "xxx" );
-
-            Config.TargetAppId = GetParameter<uint>( args, "-app", uint.MaxValue );
-            Config.DumpUnreleased = HasParameter( args, "-dump-unreleased" );
 
             steam3 = new Steam3Session(
                new SteamUser.LogOnDetails()
@@ -55,9 +65,7 @@ namespace DepotDumper
                }
             );
 
-            var steam3Credentials = steam3.WaitForCredentials();
-
-            if ( !steam3Credentials.IsValid )
+            if ( !steam3.WaitForCredentials() )
             {
                 Console.WriteLine( "Unable to get steam3 credentials." );
                 return 1;
@@ -142,7 +150,6 @@ namespace DepotDumper
                 }
             }
 
-            steam3.TryWaitForLoginKey();
             steam3.Disconnect();
 
             return 0;

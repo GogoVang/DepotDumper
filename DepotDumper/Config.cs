@@ -1,14 +1,14 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
 namespace DepotDumper
 {
-    class Config
+    class DumperConfig
     {
-        public static bool RememberPassword = false;
-        public static string SuppliedPassword = null;
-        public static bool DumpUnreleased = false;
-        public static uint TargetAppId = uint.MaxValue;
+        public bool RememberPassword { get; set; }
+        public bool DumpUnreleased { get; set; }
+        public uint TargetAppId { get; set; }
+        public bool UseQrCode { get; set; }
     }
 }

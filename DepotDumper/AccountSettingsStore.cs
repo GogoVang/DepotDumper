@@ -1,34 +1,36 @@
-﻿using System;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using ProtoBuf;
 using System.IO;
 using System.IO.Compression;
 using System.IO.IsolatedStorage;
-using System.Linq;
-using SteamKit2;
-using SteamKit2.Discovery;
+using ProtoBuf;
 
 namespace DepotDumper
 {
     [ProtoContract]
     class AccountSettingsStore
     {
-        [ProtoMember(1, IsRequired=false)]
-        public Dictionary<string, byte[]> SentryData { get; private set; }
+        // Member 1 was a Dictionary<string, byte[]> for SentryData.
 
         [ProtoMember(2, IsRequired = false)]
-        public System.Collections.Concurrent.ConcurrentDictionary<string, int> ContentServerPenalty { get; private set; }
+        public ConcurrentDictionary<string, int> ContentServerPenalty { get; private set; }
 
-        [ProtoMember(3, IsRequired = false)]
-        public Dictionary<string, string> LoginKeys { get; private set; }
+        // Member 3 was a Dictionary<string, string> for LoginKeys.
 
-        string FileName = null;
+        [ProtoMember(4, IsRequired = false)]
+        public Dictionary<string, string> LoginTokens { get; private set; }
+
+        [ProtoMember(5, IsRequired = false)]
+        public Dictionary<string, string> GuardData { get; private set; }
+
+        string FileName;
 
         AccountSettingsStore()
         {
-            SentryData = new Dictionary<string, byte[]>();
-            ContentServerPenalty = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
-            LoginKeys = new Dictionary<string, string>();
+            ContentServerPenalty = new ConcurrentDictionary<string, int>();
+            LoginTokens = [];
+            GuardData = [];
         }
 
         static bool Loaded
@@ -36,7 +38,7 @@ namespace DepotDumper
             get { return Instance != null; }
         }
 
-        public static AccountSettingsStore Instance = null;
+        public static AccountSettingsStore Instance;
         static readonly IsolatedStorageFile IsolatedStorage = IsolatedStorageFile.GetUserStoreForAssembly();
 
         public static void LoadFromFile(string filename)
@@ -48,11 +50,9 @@ namespace DepotDumper
             {
                 try
                 {
-                    using (var fs = IsolatedStorage.OpenFile(filename, FileMode.Open, FileAccess.Read))
-                    using (DeflateStream ds = new DeflateStream(fs, CompressionMode.Decompress))
-                    {
-                        Instance = ProtoBuf.Serializer.Deserialize<AccountSettingsStore>(ds);
-                    }
+                    using var fs = IsolatedStorage.OpenFile(filename, FileMode.Open, FileAccess.Read);
+                    using var ds = new DeflateStream(fs, CompressionMode.Decompress);
+                    Instance = Serializer.Deserialize<AccountSettingsStore>(ds);
                 }
                 catch (IOException ex)
                 {
@@ -75,11 +75,9 @@ namespace DepotDumper
 
             try
             {
-                using (var fs = IsolatedStorage.OpenFile(Instance.FileName, FileMode.Create, FileAccess.Write))
-                using (DeflateStream ds = new DeflateStream(fs, CompressionMode.Compress))
-                {
-                    ProtoBuf.Serializer.Serialize<AccountSettingsStore>(ds, Instance);
-                }
+                using var fs = IsolatedStorage.OpenFile(Instance.FileName, FileMode.Create, FileAccess.Write);
+                using var ds = new DeflateStream(fs, CompressionMode.Compress);
+                Serializer.Serialize(ds, Instance);
             }
             catch (IOException ex)
             {
