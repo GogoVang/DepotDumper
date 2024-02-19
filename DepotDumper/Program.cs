@@ -236,7 +236,7 @@ namespace DepotDumper
                 if ( !isOwned )
                     continue;
 
-                steam3.RequestDepotKey( depotId, appId );
+                while ( !steam3.RequestDepotKeyEx( depotId, appId ) );
 
                 byte[] depotKey;
                 if ( steam3.DepotKeys.TryGetValue( depotId, out depotKey ) )

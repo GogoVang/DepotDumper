@@ -252,10 +252,6 @@ namespace DepotDumper
                 completed = true;
                 Console.WriteLine("Got depot key for {0} result: {1}", depotKey.DepotID, depotKey.Result);
 
-                // Covers some edge cases like free weekends and expired betas.
-                if (depotKey.Result == EResult.AccessDenied || depotKey.Result == EResult.Blocked)
-                    return;
-
                 if (depotKey.Result != EResult.OK)
                 {
                     Abort();
@@ -724,6 +720,54 @@ namespace DepotDumper
 
             Console.WriteLine("Use the Steam Mobile App to sign in with this QR code:");
             Console.WriteLine(qrCodeAsAsciiArt);
+        }
+
+        public bool RequestDepotKeyEx( uint depotId, uint appid = 0 )
+        {
+            if ( DepotKeys.ContainsKey( depotId ) || bAborted )
+                return true;
+
+            var completed = false;
+
+            Action<SteamApps.DepotKeyCallback> cbMethod = depotKey =>
+            {
+                completed = true;
+                Console.WriteLine( "Got depot key for {0} result: {1}", depotKey.DepotID, depotKey.Result );
+
+                // Covers some edge cases like free weekends and expired betas.
+                if ( depotKey.Result == EResult.AccessDenied || depotKey.Result == EResult.Blocked )
+                    return;
+
+                if ( depotKey.Result != EResult.OK )
+                {
+                    Abort();
+                    return;
+                }
+
+                DepotKeys[depotKey.DepotID] = depotKey.DepotKey;
+            };
+
+            var requestTime = DateTime.Now;
+
+            WaitUntilCallback( () =>
+            {
+                callbacks.Subscribe( steamApps.GetDepotDecryptionKey( depotId, appid ), cbMethod );
+            }, () =>
+            {
+                var diff = DateTime.Now - requestTime;
+                if ( diff > TimeSpan.FromSeconds( 10 ) )
+                {
+                    return true;
+                }
+                return completed;
+            } );
+
+            if ( !completed )
+            {
+                Console.WriteLine( "Timed out when requesting depot key for {0}", depotId );
+            }
+
+            return completed;
         }
 
         public void RequestAppInfoList( IEnumerable<uint> apps )
