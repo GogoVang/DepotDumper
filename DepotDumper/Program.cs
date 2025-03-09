@@ -1,3 +1,6 @@
+// This file is subject to the terms and conditions defined
+// in file 'LICENSE', which is part of this source code package.
+
 using System;
 using System.IO;
 using System.Linq;
@@ -5,6 +8,7 @@ using System.ComponentModel;
 using System.Collections.Generic;
 
 using SteamKit2;
+using System.Threading.Tasks;
 
 namespace DepotDumper
 {
@@ -13,7 +17,7 @@ namespace DepotDumper
         public static DumperConfig Config = new();
         private static Steam3Session steam3;
 
-        static int Main( string[] args )
+        static async Task<int> Main( string[] args )
         {
             string user = null;
             string password = null;
@@ -83,7 +87,7 @@ namespace DepotDumper
                 licenseQuery = steam3.Licenses.Select( x => x.PackageID ).Distinct();
             }
 
-            steam3.RequestPackageInfo( licenseQuery );
+            await steam3.RequestPackageInfo( licenseQuery );
 
             if ( Config.TargetAppId == uint.MaxValue )
             {
@@ -118,14 +122,14 @@ namespace DepotDumper
                 sw_appnames.AutoFlush = true;
 
                 // Fetch AppInfo for all apps.
-                steam3.RequestAppInfoList( apps );
+                await steam3.RequestAppInfoList( apps );
 
                 var depots = new List<uint>();
 
                 // Go through all apps and get keys for each of their depots.
                 foreach ( var appId in apps )
                 {
-                    DumpApp( appId, licenseQuery, sw_apps, sw_keys, sw_appnames, depots );
+                    await DumpApp( appId, licenseQuery, sw_apps, sw_keys, sw_appnames, depots );
                 }
 
                 sw_apps.Close();
@@ -134,7 +138,7 @@ namespace DepotDumper
             }
             else
             {
-                steam3.RequestAppInfo( Config.TargetAppId );
+                await steam3.RequestAppInfo( Config.TargetAppId );
 
                 if ( steam3.AppTokens.ContainsKey( Config.TargetAppId ) )
                 {
@@ -142,7 +146,7 @@ namespace DepotDumper
                     StreamWriter sw_keys = new StreamWriter( string.Format( "app_{0}_keys.txt", Config.TargetAppId ) );
                     StreamWriter sw_appnames = new StreamWriter( string.Format( "app_{0}_names.txt", Config.TargetAppId ) );
 
-                    DumpApp( Config.TargetAppId, licenseQuery, sw_apps, sw_keys, sw_appnames, new List<uint>() );
+                    await DumpApp( Config.TargetAppId, licenseQuery, sw_apps, sw_keys, sw_appnames, new List<uint>() );
 
                     sw_apps.Close();
                     sw_keys.Close();
@@ -155,7 +159,7 @@ namespace DepotDumper
             return 0;
         }
 
-        static bool DumpApp( uint appId, IEnumerable<uint> licenses,
+        static async Task<bool> DumpApp( uint appId, IEnumerable<uint> licenses,
             StreamWriter sw_apps, StreamWriter sw_keys, StreamWriter sw_appnames,
             List<uint> depots )
         {
@@ -201,7 +205,7 @@ namespace DepotDumper
                             continue;
                         }
 
-                        steam3.RequestAppInfo( otherAppId );
+                        await steam3.RequestAppInfo( otherAppId );
 
                         SteamApps.PICSProductInfoCallback.PICSProductInfo otherApp;
                         if ( !steam3.AppInfo.TryGetValue( otherAppId, out otherApp ) || otherApp == null )
@@ -236,7 +240,7 @@ namespace DepotDumper
                 if ( !isOwned )
                     continue;
 
-                while ( !steam3.RequestDepotKeyEx( depotId, appId ) );
+                await steam3.RequestDepotKeyEx( depotId, appId );
 
                 byte[] depotKey;
                 if ( steam3.DepotKeys.TryGetValue( depotId, out depotKey ) )
