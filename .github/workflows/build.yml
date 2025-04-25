@@ -113,3 +113,55 @@ jobs:
           name: DepotDumper-macos-arm64
           path: selfcontained-osx-arm64
           if-no-files-found: error
+  create-release:
+    name: Create release
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts/
+
+      - name: Display downloaded artifacts
+        run: find ./artifacts/
+        
+      - name: Create release files
+        run: |
+          set -eux
+          mkdir release
+          chmod +x ./artifacts/DepotDumper-linux-x64/DepotDumper
+          chmod +x ./artifacts/DepotDumper-linux-arm/DepotDumper
+          chmod +x ./artifacts/DepotDumper-linux-arm64/DepotDumper
+          chmod +x ./artifacts/DepotDumper-macos-x64/DepotDumper
+          chmod +x ./artifacts/DepotDumper-macos-arm64/DepotDumper
+          zip -9j ./release/DepotDumper-framework.zip ./artifacts/DepotDumper-framework/*
+          zip -9j ./release/DepotDumper-windows-x64.zip ./artifacts/DepotDumper-windows-x64/*
+          zip -9j ./release/DepotDumper-windows-arm64.zip ./artifacts/DepotDumper-windows-arm64/*
+          zip -9j ./release/DepotDumper-linux-x64.zip ./artifacts/DepotDumper-linux-x64/*
+          zip -9j ./release/DepotDumper-linux-arm.zip ./artifacts/DepotDumper-linux-arm/*
+          zip -9j ./release/DepotDumper-linux-arm64.zip ./artifacts/DepotDumper-linux-arm64/*
+          zip -9j ./release/DepotDumper-macos-x64.zip ./artifacts/DepotDumper-macos-x64/*
+          zip -9j ./release/DepotDumper-macos-arm64.zip ./artifacts/DepotDumper-macos-arm64/*
+      
+      - name: Display release files
+        run: find ./release/
+
+      - name: Create rolling release
+        if: github.ref == 'refs/heads/main'
+        uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "latest"
+          prerelease: false
+          title: "Latest rolling release"
+          files: |
+            ./release/DepotDumper-framework.zip
+            ./release/DepotDumper-windows-x64.zip
+            ./release/DepotDumper-windows-arm64.zip
+            ./release/DepotDumper-linux-x64.zip
+            ./release/DepotDumper-linux-arm.zip
+            ./release/DepotDumper-linux-arm64.zip
+            ./release/DepotDumper-macos-x64.zip
+            ./release/DepotDumper-macos-arm64.zip
