@@ -1,4 +1,4 @@
-DepotDownloader
+DepotDumper
 ===============
 
 Mass depot key dumper utilizing the SteamKit2 library. Supports .NET 9.0
