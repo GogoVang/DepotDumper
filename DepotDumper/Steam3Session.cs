@@ -704,11 +704,14 @@ namespace DepotDumper
 
                     // Covers some edge cases like free weekends and expired betas.
                     if ( depotKey.Result == EResult.AccessDenied || depotKey.Result == EResult.Blocked )
+                    {
+                        Console.WriteLine( "Access denied for depot {0}, skipping", depotId );
                         return;
+                    }
 
                     if ( depotKey.Result != EResult.OK )
                     {
-                        Abort();
+                        Console.WriteLine( "Failed to get depot key for {0}: {1}, skipping", depotId, depotKey.Result );
                         return;
                     }
 
