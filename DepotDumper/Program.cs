@@ -263,6 +263,25 @@ namespace DepotDumper
                 }
             }
 
+            // Workshop depot
+            if ( depotInfo["workshopdepot"] != KeyValue.Invalid )
+            {
+                uint workshopDepotId = depotInfo["workshopdepot"].AsUnsignedInteger();
+                if ( workshopDepotId != 0 && !depots.Contains( workshopDepotId ) )
+                {
+                    await steam3.RequestDepotKeyEx( workshopDepotId, appId );
+
+                    byte[] workshopKey;
+                    if ( steam3.DepotKeys.TryGetValue( workshopDepotId, out workshopKey ) )
+                    {
+                        sw_keys.WriteLine( "{0};{1}", workshopDepotId, string.Concat( workshopKey.Select( b => b.ToString( "X2" ) ).ToArray() ) );
+                        depots.Add( workshopDepotId );
+                        sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
+                        Console.WriteLine( "Got workshop depot key for depot {0}", workshopDepotId );
+                    }
+                }
+            }
+
             return true;
         }
 
