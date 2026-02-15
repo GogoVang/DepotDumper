@@ -16,14 +16,12 @@ namespace DepotDumper
         private static Steam3Session steam3;
         private static readonly HttpClient httpClient = new HttpClient();
 
-        // Класс для десериализации ответа API
         public class ApiResponse
         {
             public string status { get; set; }
             public int total_depot_ids { get; set; }
-            public int pending_count { get; set; }
             public int existing_count { get; set; }
-            public List<string> pending_depot_ids { get; set; }
+            public List<string> depot_ids { get; set; }
             public string timestamp { get; set; }
         }
 
@@ -36,23 +34,12 @@ namespace DepotDumper
             Config.TargetAppId = GetParameter<uint>( args, "-app", uint.MaxValue );
             Config.DumpUnreleased = HasParameter( args, "-dump-unreleased" );
             
-            // Получение API ключа и списка существующих депо
             string apiKey = GetParameter<string>( args, "-apikey", null );
             HashSet<uint> existingDepotIds = null;
 
             if ( !string.IsNullOrWhiteSpace( apiKey ) )
             {
-                Console.WriteLine( "Fetching existing depot IDs from API..." );
                 existingDepotIds = await FetchExistingDepotIds( apiKey );
-                
-                if ( existingDepotIds != null && existingDepotIds.Count > 0 )
-                {
-                    Console.WriteLine( "Loaded {0} depot IDs already in database", existingDepotIds.Count );
-                }
-                else
-                {
-                    Console.WriteLine( "Failed to fetch depot IDs from API, will dump all depots" );
-                }
             }
 
             if ( !Config.UseQrCode )
@@ -164,9 +151,7 @@ namespace DepotDumper
                 sw_keys.Close();
                 sw_appnames.Close();
 
-                Console.WriteLine( "\n=== Summary ===" );
-                Console.WriteLine( "Dumped: {0} new depot keys", dumpedCount );
-                Console.WriteLine( "Skipped: {0} depot keys (already in database)", skippedCount );
+                Console.WriteLine( "\nDumped {0} depot keys, Skipped {1}", dumpedCount, skippedCount );
             }
             else
             {
@@ -184,9 +169,7 @@ namespace DepotDumper
                     sw_keys.Close();
                     sw_appnames.Close();
 
-                    Console.WriteLine( "\n=== Summary ===" );
-                    Console.WriteLine( "Dumped: {0} new depot keys", result.dumped );
-                    Console.WriteLine( "Skipped: {0} depot keys (already in database)", result.skipped );
+                    Console.WriteLine( "\nDumped {0} depot keys, Skipped {1}", result.dumped, result.skipped );
                 }
             }
 
@@ -205,7 +188,6 @@ namespace DepotDumper
                 
                 if ( !response.IsSuccessStatusCode )
                 {
-                    Console.WriteLine( "API request failed with status code: {0}", response.StatusCode );
                     return null;
                 }
 
@@ -220,19 +202,14 @@ namespace DepotDumper
 
                 if ( apiResponse == null || apiResponse.status != "success" )
                 {
-                    Console.WriteLine( "API returned unsuccessful status" );
                     return null;
                 }
 
-                Console.WriteLine( "API: {0} existing in DB, {1} missing (as of {2})", 
-                    apiResponse.existing_count, apiResponse.pending_count, apiResponse.timestamp );
-
-                // pending_depot_ids это список которые УЖЕ ЕСТЬ в базе
                 var existingIds = new HashSet<uint>();
                 
-                if ( apiResponse.pending_depot_ids != null )
+                if ( apiResponse.depot_ids != null )
                 {
-                    foreach ( var depotIdStr in apiResponse.pending_depot_ids )
+                    foreach ( var depotIdStr in apiResponse.depot_ids )
                     {
                         if ( uint.TryParse( depotIdStr, out uint depotId ) )
                         {
@@ -243,9 +220,8 @@ namespace DepotDumper
 
                 return existingIds;
             }
-            catch ( Exception ex )
+            catch
             {
-                Console.WriteLine( "Error fetching depot IDs from API: {0}", ex.Message );
                 return null;
             }
         }
@@ -285,7 +261,6 @@ namespace DepotDumper
                 if ( !uint.TryParse( depotSection.Name, out depotId ) || depotId == uint.MaxValue )
                     continue;
 
-                // Skip empty depots.
                 if ( depotSection["manifests"] == KeyValue.Invalid )
                 {
                     if ( depotSection["depotfromapp"] != KeyValue.Invalid )
@@ -293,8 +268,6 @@ namespace DepotDumper
                         uint otherAppId = depotSection["depotfromapp"].AsUnsignedInteger();
                         if ( otherAppId == appId )
                         {
-                            Console.WriteLine( "App {0}, Depot {1} has depotfromapp of {2}!",
-                                appId, depotId, otherAppId );
                             continue;
                         }
 
@@ -313,7 +286,6 @@ namespace DepotDumper
                     }
                 }
 
-                // Skip depots user doesn't own.
                 bool isOwned = false;
                 foreach ( var license in licenses )
                 {
@@ -332,17 +304,15 @@ namespace DepotDumper
                 if ( !isOwned )
                     continue;
 
-                // ПРОВЕРКА: Если депо УЖЕ ЕСТЬ в базе - пропускаем
+                // Если depot ID ЕСТЬ в списке существующих - ПРОПУСКАЕМ
                 if ( existingDepotIds != null && existingDepotIds.Contains( depotId ) )
                 {
-                    Console.WriteLine( "Depot {0} already exists in database, skipping", depotId );
-                    
                     if ( !depots.Contains( depotId ) )
                     {
                         depots.Add( depotId );
                     }
 
-                    sw_appnames.WriteLine( "\t{0} (already in DB)", depotId );
+                    sw_appnames.WriteLine( "\t{0}", depotId );
 
                     if ( depotSection["manifests"] != KeyValue.Invalid )
                     {
@@ -356,7 +326,7 @@ namespace DepotDumper
                     continue;
                 }
 
-                // Если дошли сюда - депо НЕТ в базе, дампим его
+                // Если depot ID НЕТ в списке существующих - ДАМПИМ
                 await steam3.RequestDepotKeyEx( depotId, appId );
 
                 byte[] depotKey;
@@ -367,7 +337,6 @@ namespace DepotDumper
                         string keyHex = string.Concat( depotKey.Select( b => b.ToString( "X2" ) ).ToArray() );
                         sw_keys.WriteLine( "{0};{1}", depotId, keyHex );
                         depots.Add( depotId );
-                        Console.WriteLine( "✓ Dumped NEW depot key for depot {0}", depotId );
                         dumpedCount++;
                     }
 
@@ -383,22 +352,21 @@ namespace DepotDumper
                 }
             }
 
-            // Workshop depot
             if ( depotInfo["workshopdepot"] != KeyValue.Invalid )
             {
                 uint workshopDepotId = depotInfo["workshopdepot"].AsUnsignedInteger();
                 if ( workshopDepotId != 0 && !depots.Contains( workshopDepotId ) )
                 {
-                    // ПРОВЕРКА: Workshop depot УЖЕ ЕСТЬ в базе?
+                    // Если workshop depot ЕСТЬ в списке - ПРОПУСКАЕМ
                     if ( existingDepotIds != null && existingDepotIds.Contains( workshopDepotId ) )
                     {
-                        Console.WriteLine( "Workshop depot {0} already exists in database, skipping", workshopDepotId );
                         depots.Add( workshopDepotId );
-                        sw_appnames.WriteLine( "\t{0} (workshop - already in DB)", workshopDepotId );
+                        sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
                         skippedCount++;
                     }
                     else
                     {
+                        // Если НЕТ в списке - ДАМПИМ
                         await steam3.RequestDepotKeyEx( workshopDepotId, appId );
 
                         byte[] workshopKey;
@@ -407,7 +375,6 @@ namespace DepotDumper
                             sw_keys.WriteLine( "{0};{1}", workshopDepotId, string.Concat( workshopKey.Select( b => b.ToString( "X2" ) ).ToArray() ) );
                             depots.Add( workshopDepotId );
                             sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
-                            Console.WriteLine( "✓ Dumped NEW workshop depot key for depot {0}", workshopDepotId );
                             dumpedCount++;
                         }
                     }
