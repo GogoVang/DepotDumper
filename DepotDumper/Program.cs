@@ -1,12 +1,10 @@
-// This file is subject to the terms and conditions defined
-// in file 'LICENSE', which is part of this source code package.
-
 using System;
 using System.IO;
 using System.Linq;
 using System.ComponentModel;
 using System.Collections.Generic;
-
+using System.Net.Http;
+using System.Text.Json;
 using SteamKit2;
 using System.Threading.Tasks;
 
@@ -16,6 +14,17 @@ namespace DepotDumper
     {
         public static DumperConfig Config = new();
         private static Steam3Session steam3;
+        private static readonly HttpClient httpClient = new HttpClient();
+
+        // Класс для десериализации ответа API
+        public class ApiResponse
+        {
+            public string status { get; set; }
+            public int total_depot_ids { get; set; }
+            public int pending_count { get; set; }
+            public int existing_count { get; set; }
+            public List<string> pending_depot_ids { get; set; }
+        }
 
         static async Task<int> Main( string[] args )
         {
@@ -25,6 +34,25 @@ namespace DepotDumper
             Config.RememberPassword = false;
             Config.TargetAppId = GetParameter<uint>( args, "-app", uint.MaxValue );
             Config.DumpUnreleased = HasParameter( args, "-dump-unreleased" );
+            
+            // ====== НОВЫЙ КОД: Получение API ключа ======
+            string apiKey = GetParameter<string>( args, "-apikey", null );
+            HashSet<uint> pendingDepotIds = null;
+
+            if ( !string.IsNullOrWhiteSpace( apiKey ) )
+            {
+                Console.WriteLine( "Fetching existing depot keys from API..." );
+                pendingDepotIds = await FetchPendingDepotIds( apiKey );
+                
+                if ( pendingDepotIds != null )
+                {
+                    Console.WriteLine( "Found {0} pending depot IDs to dump", pendingDepotIds.Count );
+                }
+                else
+                {
+                    Console.WriteLine( "Failed to fetch depot IDs from API, will dump all depots" );
+                }
+            }
 
             if ( !Config.UseQrCode )
             {
@@ -42,7 +70,6 @@ namespace DepotDumper
                         }
                         else
                         {
-                            // Avoid console echoing of password
                             password = Util.ReadPassword();
                         }
 
@@ -51,7 +78,6 @@ namespace DepotDumper
                 }
                 else
                 {
-                    // Login anonymously.
                     user = null;
                     password = null;
                 }
@@ -65,7 +91,7 @@ namespace DepotDumper
                    Username = user,
                    Password = password,
                    ShouldRememberPassword = false,
-                   LoginID = 0x534B32, // "SK2"
+                   LoginID = 0x534B32,
                }
             );
 
@@ -96,7 +122,6 @@ namespace DepotDumper
                 StreamWriter sw_pkgs = new StreamWriter( string.Format( "{0}_pkgs.txt", filenameUser ) );
                 sw_pkgs.AutoFlush = true;
 
-                // Collect all apps user owns.
                 var apps = new List<uint>();
 
                 foreach ( var license in licenseQuery )
@@ -121,15 +146,13 @@ namespace DepotDumper
                 StreamWriter sw_appnames = new StreamWriter( string.Format( "{0}_appnames.txt", filenameUser ) );
                 sw_appnames.AutoFlush = true;
 
-                // Fetch AppInfo for all apps.
                 await steam3.RequestAppInfoList( apps );
 
                 var depots = new List<uint>();
 
-                // Go through all apps and get keys for each of their depots.
                 foreach ( var appId in apps )
                 {
-                    await DumpApp( appId, licenseQuery, sw_apps, sw_keys, sw_appnames, depots );
+                    await DumpApp( appId, licenseQuery, sw_apps, sw_keys, sw_appnames, depots, pendingDepotIds );
                 }
 
                 sw_apps.Close();
@@ -146,7 +169,7 @@ namespace DepotDumper
                     StreamWriter sw_keys = new StreamWriter( string.Format( "app_{0}_keys.txt", Config.TargetAppId ) );
                     StreamWriter sw_appnames = new StreamWriter( string.Format( "app_{0}_names.txt", Config.TargetAppId ) );
 
-                    await DumpApp( Config.TargetAppId, licenseQuery, sw_apps, sw_keys, sw_appnames, new List<uint>() );
+                    await DumpApp( Config.TargetAppId, licenseQuery, sw_apps, sw_keys, sw_appnames, new List<uint>(), pendingDepotIds );
 
                     sw_apps.Close();
                     sw_keys.Close();
@@ -159,9 +182,65 @@ namespace DepotDumper
             return 0;
         }
 
+        static async Task<HashSet<uint>> FetchPendingDepotIds( string apiKey )
+        {
+            try
+            {
+                string url = $"https://manifest.morrenus.xyz/api/v1/depot-keys?api_key={apiKey}";
+                
+                var response = await httpClient.GetAsync( url );
+                
+                if ( !response.IsSuccessStatusCode )
+                {
+                    Console.WriteLine( "API request failed with status code: {0}", response.StatusCode );
+                    return null;
+                }
+
+                string jsonResponse = await response.Content.ReadAsStringAsync();
+                
+                var options = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+                
+                var apiResponse = JsonSerializer.Deserialize<ApiResponse>( jsonResponse, options );
+
+                if ( apiResponse == null || apiResponse.status != "success" )
+                {
+                    Console.WriteLine( "API returned unsuccessful status" );
+                    return null;
+                }
+
+                Console.WriteLine( "API Stats:" );
+                Console.WriteLine( "  Total depot IDs: {0}", apiResponse.total_depot_ids );
+                Console.WriteLine( "  Existing count: {0}", apiResponse.existing_count );
+                Console.WriteLine( "  Pending count: {0}", apiResponse.pending_count );
+
+                var pendingIds = new HashSet<uint>();
+                
+                if ( apiResponse.pending_depot_ids != null )
+                {
+                    foreach ( var depotIdStr in apiResponse.pending_depot_ids )
+                    {
+                        if ( uint.TryParse( depotIdStr, out uint depotId ) )
+                        {
+                            pendingIds.Add( depotId );
+                        }
+                    }
+                }
+
+                return pendingIds;
+            }
+            catch ( Exception ex )
+            {
+                Console.WriteLine( "Error fetching depot IDs from API: {0}", ex.Message );
+                return null;
+            }
+        }
+
         static async Task<bool> DumpApp( uint appId, IEnumerable<uint> licenses,
             StreamWriter sw_apps, StreamWriter sw_keys, StreamWriter sw_appnames,
-            List<uint> depots )
+            List<uint> depots, HashSet<uint> pendingDepotIds = null )
         {
             SteamApps.PICSProductInfoCallback.PICSProductInfo app;
             if ( !steam3.AppInfo.TryGetValue( appId, out app ) || app == null )
@@ -199,7 +278,6 @@ namespace DepotDumper
                         uint otherAppId = depotSection["depotfromapp"].AsUnsignedInteger();
                         if ( otherAppId == appId )
                         {
-                            // This shouldn't ever happen, but ya never know with Valve.
                             Console.WriteLine( "App {0}, Depot {1} has depotfromapp of {2}!",
                                 appId, depotId, otherAppId );
                             continue;
@@ -227,7 +305,6 @@ namespace DepotDumper
                     SteamApps.PICSProductInfoCallback.PICSProductInfo package;
                     if ( steam3.PackageInfo.TryGetValue( license, out package ) && package != null )
                     {
-                        // Check app list, too, since owning an app with the same ID counts as owning the depot.
                         if ( package.KeyValues["depotids"].Children.Any( child => child.AsUnsignedInteger() == depotId ) ||
                             package.KeyValues["appids"].Children.Any( child => child.AsUnsignedInteger() == depotId ) )
                         {
@@ -240,6 +317,27 @@ namespace DepotDumper
                 if ( !isOwned )
                     continue;
 
+                if ( pendingDepotIds != null && !pendingDepotIds.Contains( depotId ) )
+                {
+                    Console.WriteLine( "Depot {0} already exists in API database, skipping", depotId );
+                    
+                    if ( !depots.Contains( depotId ) )
+                    {
+                        depots.Add( depotId );
+                    }
+
+                    sw_appnames.WriteLine( "\t{0} (skipped - already in DB)", depotId );
+
+                    if ( depotSection["manifests"] != KeyValue.Invalid )
+                    {
+                        foreach ( var branch in depotSection["manifests"].Children )
+                        {
+                            sw_appnames.WriteLine( "\t\t{0} - {1}", branch.Name, branch["gid"].AsUnsignedLong() );
+                        }
+                    }
+                    continue;
+                }
+
                 await steam3.RequestDepotKeyEx( depotId, appId );
 
                 byte[] depotKey;
@@ -247,8 +345,10 @@ namespace DepotDumper
                 {
                     if ( !depots.Contains( depotId ) )
                     {
-                        sw_keys.WriteLine( "{0};{1}", depotId, string.Concat( depotKey.Select( b => b.ToString( "X2" ) ).ToArray() ) );
+                        string keyHex = string.Concat( depotKey.Select( b => b.ToString( "X2" ) ).ToArray() );
+                        sw_keys.WriteLine( "{0};{1}", depotId, keyHex );
                         depots.Add( depotId );
+                        Console.WriteLine( "Got NEW depot key for depot {0}", depotId );
                     }
 
                     sw_appnames.WriteLine( "\t{0}", depotId );
@@ -269,6 +369,16 @@ namespace DepotDumper
                 uint workshopDepotId = depotInfo["workshopdepot"].AsUnsignedInteger();
                 if ( workshopDepotId != 0 && !depots.Contains( workshopDepotId ) )
                 {
+                    // ====== ПРОВЕРКА: Workshop depot уже существует в API? ======
+                    if ( pendingDepotIds != null && !pendingDepotIds.Contains( workshopDepotId ) )
+                    {
+                        Console.WriteLine( "Workshop depot {0} already exists in API database, skipping", workshopDepotId );
+                        depots.Add( workshopDepotId );
+                        sw_appnames.WriteLine( "\t{0} (workshop - skipped, already in DB)", workshopDepotId );
+                        return true;
+                    }
+                    // ============================================================
+
                     await steam3.RequestDepotKeyEx( workshopDepotId, appId );
 
                     byte[] workshopKey;
@@ -277,7 +387,7 @@ namespace DepotDumper
                         sw_keys.WriteLine( "{0};{1}", workshopDepotId, string.Concat( workshopKey.Select( b => b.ToString( "X2" ) ).ToArray() ) );
                         depots.Add( workshopDepotId );
                         sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
-                        Console.WriteLine( "Got workshop depot key for depot {0}", workshopDepotId );
+                        Console.WriteLine( "Got NEW workshop depot key for depot {0}", workshopDepotId );
                     }
                 }
             }
