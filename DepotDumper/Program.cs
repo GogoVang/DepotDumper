@@ -286,7 +286,7 @@ namespace DepotDumper
                     }
                 }
 
-                // ПРОВЕРКА ВЛАДЕНИЯ - ВЫПОЛНЯЕТСЯ ПЕРВОЙ
+                // ПРОВЕРКА ВЛАДЕНИЯ - ВЫПОЛНЯЕТСЯ ПЕРВОЙ ДЛЯ ВСЕХ ДЕПОТОВ
                 bool isOwned = false;
                 foreach ( var license in licenses )
                 {
@@ -302,11 +302,11 @@ namespace DepotDumper
                     }
                 }
 
-                // Если не владеем - пропускаем сразу, не проверяя существование в базе
+                // Если не владеем - пропускаем сразу
                 if ( !isOwned )
                     continue;
 
-                // Если depot ID ЕСТЬ в списке существующих - ПРОПУСКАЕМ
+                // Если depot ID ЕСТЬ в списке существующих - ПРОПУСКАЕМ (но только если владеем)
                 if ( existingDepotIds != null && existingDepotIds.Contains( depotId ) )
                 {
                     if ( !depots.Contains( depotId ) )
@@ -328,7 +328,7 @@ namespace DepotDumper
                     continue;
                 }
 
-                // Если depot ID НЕТ в списке существующих - ДАМПИМ
+                // Если depot ID НЕТ в списке существующих - ДАМПИМ (мы уже проверили владение выше)
                 await steam3.RequestDepotKeyEx( depotId, appId );
 
                 byte[] depotKey;
@@ -359,8 +359,29 @@ namespace DepotDumper
                 uint workshopDepotId = depotInfo["workshopdepot"].AsUnsignedInteger();
                 if ( workshopDepotId != 0 && !depots.Contains( workshopDepotId ) )
                 {
+                    // ПРОВЕРКА ВЛАДЕНИЯ для workshop depot
+                    bool isWorkshopOwned = false;
+                    foreach ( var license in licenses )
+                    {
+                        SteamApps.PICSProductInfoCallback.PICSProductInfo package;
+                        if ( steam3.PackageInfo.TryGetValue( license, out package ) && package != null )
+                        {
+                            if ( package.KeyValues["depotids"].Children.Any( child => child.AsUnsignedInteger() == workshopDepotId ) ||
+                                package.KeyValues["appids"].Children.Any( child => child.AsUnsignedInteger() == workshopDepotId ) )
+                            {
+                                isWorkshopOwned = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // Если не владеем workshop depot - пропускаем
+                    if ( !isWorkshopOwned )
+                    {
+                        // Ничего не делаем
+                    }
                     // Если workshop depot ЕСТЬ в списке - ПРОПУСКАЕМ
-                    if ( existingDepotIds != null && existingDepotIds.Contains( workshopDepotId ) )
+                    else if ( existingDepotIds != null && existingDepotIds.Contains( workshopDepotId ) )
                     {
                         depots.Add( workshopDepotId );
                         sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
