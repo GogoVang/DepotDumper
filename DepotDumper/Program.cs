@@ -16,7 +16,6 @@ namespace DepotDumper
         private static Steam3Session steam3;
         private static readonly HttpClient httpClient = new HttpClient();
 
-        // Класс для десериализации ответа API
         public class ApiResponse
         {
             public string status { get; set; }
@@ -35,7 +34,6 @@ namespace DepotDumper
             Config.TargetAppId = GetParameter<uint>( args, "-app", uint.MaxValue );
             Config.DumpUnreleased = HasParameter( args, "-dump-unreleased" );
             
-            // ====== НОВЫЙ КОД: Получение API ключа ======
             string apiKey = GetParameter<string>( args, "-apikey", null );
             HashSet<uint> pendingDepotIds = null;
 
@@ -377,7 +375,6 @@ namespace DepotDumper
                         sw_appnames.WriteLine( "\t{0} (workshop - skipped, already in DB)", workshopDepotId );
                         return true;
                     }
-                    // ============================================================
 
                     await steam3.RequestDepotKeyEx( workshopDepotId, appId );
 
@@ -429,3 +426,4 @@ namespace DepotDumper
         }
     }
 }
+
