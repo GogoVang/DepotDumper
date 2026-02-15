@@ -286,27 +286,7 @@ namespace DepotDumper
                     }
                 }
 
-                // ПРОВЕРКА ВЛАДЕНИЯ - ВЫПОЛНЯЕТСЯ ПЕРВОЙ ДЛЯ ВСЕХ ДЕПОТОВ
-                bool isOwned = false;
-                foreach ( var license in licenses )
-                {
-                    SteamApps.PICSProductInfoCallback.PICSProductInfo package;
-                    if ( steam3.PackageInfo.TryGetValue( license, out package ) && package != null )
-                    {
-                        if ( package.KeyValues["depotids"].Children.Any( child => child.AsUnsignedInteger() == depotId ) ||
-                            package.KeyValues["appids"].Children.Any( child => child.AsUnsignedInteger() == depotId ) )
-                        {
-                            isOwned = true;
-                            break;
-                        }
-                    }
-                }
-
-                // Если не владеем - пропускаем сразу
-                if ( !isOwned )
-                    continue;
-
-                // Если depot ID ЕСТЬ в списке существующих - ПРОПУСКАЕМ (но только если владеем)
+                // Если depot ID ЕСТЬ в списке существующих - ПРОПУСКАЕМ БЕЗ ЗАПРОСА КЛЮЧА
                 if ( existingDepotIds != null && existingDepotIds.Contains( depotId ) )
                 {
                     if ( !depots.Contains( depotId ) )
@@ -328,12 +308,13 @@ namespace DepotDumper
                     continue;
                 }
 
-                // Если depot ID НЕТ в списке существующих - ДАМПИМ (мы уже проверили владение выше)
+                // Если depot ID НЕТ в списке существующих - ЗАПРАШИВАЕМ КЛЮЧ
                 await steam3.RequestDepotKeyEx( depotId, appId );
 
                 byte[] depotKey;
                 if ( steam3.DepotKeys.TryGetValue( depotId, out depotKey ) )
                 {
+                    // Ключ получен успешно - значит у нас есть доступ
                     if ( !depots.Contains( depotId ) )
                     {
                         string keyHex = string.Concat( depotKey.Select( b => b.ToString( "X2" ) ).ToArray() );
@@ -352,6 +333,7 @@ namespace DepotDumper
                         }
                     }
                 }
+                // Если ключ не получен - значит нет доступа, просто пропускаем
             }
 
             if ( depotInfo["workshopdepot"] != KeyValue.Invalid )
@@ -359,29 +341,8 @@ namespace DepotDumper
                 uint workshopDepotId = depotInfo["workshopdepot"].AsUnsignedInteger();
                 if ( workshopDepotId != 0 && !depots.Contains( workshopDepotId ) )
                 {
-                    // ПРОВЕРКА ВЛАДЕНИЯ для workshop depot
-                    bool isWorkshopOwned = false;
-                    foreach ( var license in licenses )
-                    {
-                        SteamApps.PICSProductInfoCallback.PICSProductInfo package;
-                        if ( steam3.PackageInfo.TryGetValue( license, out package ) && package != null )
-                        {
-                            if ( package.KeyValues["depotids"].Children.Any( child => child.AsUnsignedInteger() == workshopDepotId ) ||
-                                package.KeyValues["appids"].Children.Any( child => child.AsUnsignedInteger() == workshopDepotId ) )
-                            {
-                                isWorkshopOwned = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    // Если не владеем workshop depot - пропускаем
-                    if ( !isWorkshopOwned )
-                    {
-                        // Ничего не делаем
-                    }
-                    // Если workshop depot ЕСТЬ в списке - ПРОПУСКАЕМ
-                    else if ( existingDepotIds != null && existingDepotIds.Contains( workshopDepotId ) )
+                    // Если workshop depot ЕСТЬ в списке - ПРОПУСКАЕМ БЕЗ ЗАПРОСА
+                    if ( existingDepotIds != null && existingDepotIds.Contains( workshopDepotId ) )
                     {
                         depots.Add( workshopDepotId );
                         sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
@@ -389,17 +350,19 @@ namespace DepotDumper
                     }
                     else
                     {
-                        // Если НЕТ в списке - ДАМПИМ
+                        // Если НЕТ в списке - ЗАПРАШИВАЕМ КЛЮЧ
                         await steam3.RequestDepotKeyEx( workshopDepotId, appId );
 
                         byte[] workshopKey;
                         if ( steam3.DepotKeys.TryGetValue( workshopDepotId, out workshopKey ) )
                         {
+                            // Ключ получен - есть доступ
                             sw_keys.WriteLine( "{0};{1}", workshopDepotId, string.Concat( workshopKey.Select( b => b.ToString( "X2" ) ).ToArray() ) );
                             depots.Add( workshopDepotId );
                             sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
                             dumpedCount++;
                         }
+                        // Если ключ не получен - нет доступа, пропускаем
                     }
                 }
             }
