@@ -40,6 +40,10 @@ namespace DepotDumper
             if ( !string.IsNullOrWhiteSpace( apiKey ) )
             {
                 existingDepotIds = await FetchExistingDepotIds( apiKey );
+                if ( existingDepotIds != null )
+                {
+                    Console.WriteLine( $"Loaded {existingDepotIds.Count} existing depot IDs from API" );
+                }
             }
 
             if ( !Config.UseQrCode )
@@ -188,6 +192,7 @@ namespace DepotDumper
                 
                 if ( !response.IsSuccessStatusCode )
                 {
+                    Console.WriteLine( $"API request failed with status: {response.StatusCode}" );
                     return null;
                 }
 
@@ -202,6 +207,7 @@ namespace DepotDumper
 
                 if ( apiResponse == null || apiResponse.status != "success" )
                 {
+                    Console.WriteLine( "API response status is not success" );
                     return null;
                 }
 
@@ -220,8 +226,9 @@ namespace DepotDumper
 
                 return existingIds;
             }
-            catch
+            catch ( Exception ex )
             {
+                Console.WriteLine( $"Error fetching existing depot IDs: {ex.Message}" );
                 return null;
             }
         }
@@ -286,26 +293,16 @@ namespace DepotDumper
                     }
                 }
 
-                // ШАГ 1: ВСЕГДА СНАЧАЛА ЗАПРАШИВАЕМ КЛЮЧ (чтобы проверить доступ)
-                await steam3.RequestDepotKeyEx( depotId, appId );
-
-                byte[] depotKey;
-                if ( !steam3.DepotKeys.TryGetValue( depotId, out depotKey ) )
-                {
-                    // Ключ не получен = нет доступа, пропускаем
-                    continue;
-                }
-
-                // ШАГ 2: Ключ получен, проверяем - есть ли уже в базе
+                // ШАГ 1: Проверяем, есть ли депот в базе ПЕРЕД запросом ключа
                 if ( existingDepotIds != null && existingDepotIds.Contains( depotId ) )
                 {
-                    // Депот уже в базе, не дампим, но записываем в appnames
+                    // Депот уже в базе, пропускаем БЕЗ запроса ключа
                     if ( !depots.Contains( depotId ) )
                     {
                         depots.Add( depotId );
                     }
 
-                    sw_appnames.WriteLine( "\t{0}", depotId );
+                    sw_appnames.WriteLine( "\t{0} (already in database)", depotId );
 
                     if ( depotSection["manifests"] != KeyValue.Invalid )
                     {
@@ -319,7 +316,19 @@ namespace DepotDumper
                     continue;
                 }
 
-                // ШАГ 3: Депота нет в базе, дампим
+                // ШАГ 2: Депота нет в базе, проверяем доступ через запрос ключа
+                bool hadKeyBefore = steam3.DepotKeys.ContainsKey( depotId );
+                
+                await steam3.RequestDepotKeyEx( depotId, appId );
+
+                byte[] depotKey;
+                if ( !steam3.DepotKeys.TryGetValue( depotId, out depotKey ) )
+                {
+                    // Ключ не получен = нет доступа, пропускаем
+                    continue;
+                }
+
+                // ШАГ 3: Ключ получен и депота нет в базе - дампим
                 if ( !depots.Contains( depotId ) )
                 {
                     string keyHex = string.Concat( depotKey.Select( b => b.ToString( "X2" ) ).ToArray() );
@@ -344,28 +353,29 @@ namespace DepotDumper
                 uint workshopDepotId = depotInfo["workshopdepot"].AsUnsignedInteger();
                 if ( workshopDepotId != 0 && !depots.Contains( workshopDepotId ) )
                 {
-                    // ШАГ 1: ВСЕГДА СНАЧАЛА ЗАПРАШИВАЕМ КЛЮЧ
-                    await steam3.RequestDepotKeyEx( workshopDepotId, appId );
-
-                    byte[] workshopKey;
-                    if ( !steam3.DepotKeys.TryGetValue( workshopDepotId, out workshopKey ) )
+                    // ШАГ 1: Проверяем, есть ли в базе ПЕРЕД запросом
+                    if ( existingDepotIds != null && existingDepotIds.Contains( workshopDepotId ) )
                     {
-                        // Нет доступа, пропускаем
-                    }
-                    else if ( existingDepotIds != null && existingDepotIds.Contains( workshopDepotId ) )
-                    {
-                        // ШАГ 2: Есть в базе, не дампим
+                        // Уже в базе, пропускаем БЕЗ запроса
                         depots.Add( workshopDepotId );
-                        sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
+                        sw_appnames.WriteLine( "\t{0} (workshop, already in database)", workshopDepotId );
                         skippedCount++;
                     }
                     else
                     {
-                        // ШАГ 3: Нет в базе, дампим
-                        sw_keys.WriteLine( "{0};{1}", workshopDepotId, string.Concat( workshopKey.Select( b => b.ToString( "X2" ) ).ToArray() ) );
-                        depots.Add( workshopDepotId );
-                        sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
-                        dumpedCount++;
+                        // ШАГ 2: Нет в базе, запрашиваем ключ
+                        await steam3.RequestDepotKeyEx( workshopDepotId, appId );
+
+                        byte[] workshopKey;
+                        if ( steam3.DepotKeys.TryGetValue( workshopDepotId, out workshopKey ) )
+                        {
+                            // ШАГ 3: Ключ получен, дампим
+                            sw_keys.WriteLine( "{0};{1}", workshopDepotId, string.Concat( workshopKey.Select( b => b.ToString( "X2" ) ).ToArray() ) );
+                            depots.Add( workshopDepotId );
+                            sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
+                            dumpedCount++;
+                        }
+                        // Если ключ не получен - нет доступа, пропускаем
                     }
                 }
             }
