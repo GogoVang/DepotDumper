@@ -286,9 +286,20 @@ namespace DepotDumper
                     }
                 }
 
-                // Если depot ID ЕСТЬ в списке существующих - ПРОПУСКАЕМ БЕЗ ЗАПРОСА КЛЮЧА
+                // ШАГ 1: ВСЕГДА СНАЧАЛА ЗАПРАШИВАЕМ КЛЮЧ (чтобы проверить доступ)
+                await steam3.RequestDepotKeyEx( depotId, appId );
+
+                byte[] depotKey;
+                if ( !steam3.DepotKeys.TryGetValue( depotId, out depotKey ) )
+                {
+                    // Ключ не получен = нет доступа, пропускаем
+                    continue;
+                }
+
+                // ШАГ 2: Ключ получен, проверяем - есть ли уже в базе
                 if ( existingDepotIds != null && existingDepotIds.Contains( depotId ) )
                 {
+                    // Депот уже в базе, не дампим, но записываем в appnames
                     if ( !depots.Contains( depotId ) )
                     {
                         depots.Add( depotId );
@@ -308,32 +319,24 @@ namespace DepotDumper
                     continue;
                 }
 
-                // Если depot ID НЕТ в списке существующих - ЗАПРАШИВАЕМ КЛЮЧ
-                await steam3.RequestDepotKeyEx( depotId, appId );
-
-                byte[] depotKey;
-                if ( steam3.DepotKeys.TryGetValue( depotId, out depotKey ) )
+                // ШАГ 3: Депота нет в базе, дампим
+                if ( !depots.Contains( depotId ) )
                 {
-                    // Ключ получен успешно - значит у нас есть доступ
-                    if ( !depots.Contains( depotId ) )
-                    {
-                        string keyHex = string.Concat( depotKey.Select( b => b.ToString( "X2" ) ).ToArray() );
-                        sw_keys.WriteLine( "{0};{1}", depotId, keyHex );
-                        depots.Add( depotId );
-                        dumpedCount++;
-                    }
+                    string keyHex = string.Concat( depotKey.Select( b => b.ToString( "X2" ) ).ToArray() );
+                    sw_keys.WriteLine( "{0};{1}", depotId, keyHex );
+                    depots.Add( depotId );
+                    dumpedCount++;
+                }
 
-                    sw_appnames.WriteLine( "\t{0}", depotId );
+                sw_appnames.WriteLine( "\t{0}", depotId );
 
-                    if ( depotSection["manifests"] != KeyValue.Invalid )
+                if ( depotSection["manifests"] != KeyValue.Invalid )
+                {
+                    foreach ( var branch in depotSection["manifests"].Children )
                     {
-                        foreach ( var branch in depotSection["manifests"].Children )
-                        {
-                            sw_appnames.WriteLine( "\t\t{0} - {1}", branch.Name, branch["gid"].AsUnsignedLong() );
-                        }
+                        sw_appnames.WriteLine( "\t\t{0} - {1}", branch.Name, branch["gid"].AsUnsignedLong() );
                     }
                 }
-                // Если ключ не получен - значит нет доступа, просто пропускаем
             }
 
             if ( depotInfo["workshopdepot"] != KeyValue.Invalid )
@@ -341,28 +344,28 @@ namespace DepotDumper
                 uint workshopDepotId = depotInfo["workshopdepot"].AsUnsignedInteger();
                 if ( workshopDepotId != 0 && !depots.Contains( workshopDepotId ) )
                 {
-                    // Если workshop depot ЕСТЬ в списке - ПРОПУСКАЕМ БЕЗ ЗАПРОСА
-                    if ( existingDepotIds != null && existingDepotIds.Contains( workshopDepotId ) )
+                    // ШАГ 1: ВСЕГДА СНАЧАЛА ЗАПРАШИВАЕМ КЛЮЧ
+                    await steam3.RequestDepotKeyEx( workshopDepotId, appId );
+
+                    byte[] workshopKey;
+                    if ( !steam3.DepotKeys.TryGetValue( workshopDepotId, out workshopKey ) )
                     {
+                        // Нет доступа, пропускаем
+                    }
+                    else if ( existingDepotIds != null && existingDepotIds.Contains( workshopDepotId ) )
+                    {
+                        // ШАГ 2: Есть в базе, не дампим
                         depots.Add( workshopDepotId );
                         sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
                         skippedCount++;
                     }
                     else
                     {
-                        // Если НЕТ в списке - ЗАПРАШИВАЕМ КЛЮЧ
-                        await steam3.RequestDepotKeyEx( workshopDepotId, appId );
-
-                        byte[] workshopKey;
-                        if ( steam3.DepotKeys.TryGetValue( workshopDepotId, out workshopKey ) )
-                        {
-                            // Ключ получен - есть доступ
-                            sw_keys.WriteLine( "{0};{1}", workshopDepotId, string.Concat( workshopKey.Select( b => b.ToString( "X2" ) ).ToArray() ) );
-                            depots.Add( workshopDepotId );
-                            sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
-                            dumpedCount++;
-                        }
-                        // Если ключ не получен - нет доступа, пропускаем
+                        // ШАГ 3: Нет в базе, дампим
+                        sw_keys.WriteLine( "{0};{1}", workshopDepotId, string.Concat( workshopKey.Select( b => b.ToString( "X2" ) ).ToArray() ) );
+                        depots.Add( workshopDepotId );
+                        sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
+                        dumpedCount++;
                     }
                 }
             }
