@@ -286,6 +286,7 @@ namespace DepotDumper
                     }
                 }
 
+                // ПРОВЕРКА ВЛАДЕНИЯ - ВЫПОЛНЯЕТСЯ ПЕРВОЙ
                 bool isOwned = false;
                 foreach ( var license in licenses )
                 {
@@ -301,6 +302,7 @@ namespace DepotDumper
                     }
                 }
 
+                // Если не владеем - пропускаем сразу, не проверяя существование в базе
                 if ( !isOwned )
                     continue;
 
