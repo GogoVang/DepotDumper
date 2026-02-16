@@ -21,5 +21,5 @@ Resulting files:
 
 Optional parameters:
 * -app \<#> - dump keys for a specific app.
-* -apikey <key> - fetch existing depot IDs from a database to avoid re-dumping keys that are already there.
+* -apikey \<key> - fetch existing depot IDs from a database to avoid re-dumping keys that are already there.
 * -dump-unreleased - apps that don't have "released" status are skipped by default to prevent accidental leaks, add this parameter to override this behavior.
