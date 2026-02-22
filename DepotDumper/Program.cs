@@ -24,7 +24,7 @@ namespace DepotDumper
             public string status { get; set; }
             public int total_depot_ids { get; set; }
             public int existing_count { get; set; }
-            public List<string> depot_ids { get; set; }
+            public List<string> existing_depot_ids { get; set; }
             public string timestamp { get; set; }
         }
 
@@ -241,15 +241,15 @@ namespace DepotDumper
                     return null;
                 }
 
-                Console.WriteLine( "API: {0} existing in DB, {1} missing (as of {2})",
-                    apiResponse.existing_count, apiResponse.depot_ids?.Count ?? 0, apiResponse.timestamp );
+                Console.WriteLine( "API: {0} existing in DB (as of {1})",
+                    apiResponse.existing_count, apiResponse.timestamp );
 
 
                 var existingIds = new HashSet<uint>();
 
-                if ( apiResponse.depot_ids != null )
+                if ( apiResponse.existing_depot_ids != null )
                 {
-                    foreach ( var depotIdStr in apiResponse.depot_ids )
+                    foreach ( var depotIdStr in apiResponse.existing_depot_ids )
                     {
                         if ( uint.TryParse( depotIdStr, out uint depotId ) )
                         {
