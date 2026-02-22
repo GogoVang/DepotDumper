@@ -25,6 +25,7 @@ namespace DepotDumper
             public int total_depot_ids { get; set; }
             public int existing_count { get; set; }
             public List<string> depot_ids { get; set; }
+            public int pending_count { get; set; }
             public string timestamp { get; set; }
         }
 
@@ -242,7 +243,7 @@ namespace DepotDumper
                 }
 
                 Console.WriteLine( "API: {0} existing in DB, {1} pending (as of {2})",
-                    apiResponse.existing_count, apiResponse.depot_ids?.Count ?? 0, apiResponse.timestamp );
+                    apiResponse.existing_count, apiResponse.pending_count, apiResponse.timestamp );
 
 
                 var existingIds = new HashSet<uint>();
@@ -462,3 +463,4 @@ namespace DepotDumper
         }
     }
 }
+
