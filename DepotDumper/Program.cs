@@ -410,7 +410,7 @@ namespace DepotDumper
                             sw_keys.WriteLine( "{0};{1}", workshopDepotId, string.Concat( workshopKey.Select( b => b.ToString( "X2" ) ).ToArray() ) );
                             depots.Add( workshopDepotId );
                             sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
-                            Console.WriteLine( "Dumped NEW workshop depot key for depot {0}", workshopDepotId );
+                            Console.WriteLine( "Dumped workshop depot key for depot {0}", workshopDepotId );
                             dumpedCount++;
                         }
                     }
@@ -454,3 +454,4 @@ namespace DepotDumper
         }
     }
 }
+
