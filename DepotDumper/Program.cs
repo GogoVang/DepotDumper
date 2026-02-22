@@ -24,7 +24,7 @@ namespace DepotDumper
             public string status { get; set; }
             public int total_depot_ids { get; set; }
             public int existing_count { get; set; }
-            public List<string> depot_ids { get; set; }
+            public List<string> existing_depot_ids { get; set; }
             public string timestamp { get; set; }
         }
 
@@ -39,6 +39,7 @@ namespace DepotDumper
 
             string apiKey = GetParameter<string>( args, "-apikey", null );
             HashSet<uint> existingDepotIds = null;
+            bool hasApiKey = false;
 
             if ( !string.IsNullOrWhiteSpace( apiKey ) )
             {
@@ -48,10 +49,22 @@ namespace DepotDumper
                 if ( existingDepotIds != null && existingDepotIds.Count > 0 )
                 {
                     Console.WriteLine( "Loaded {0} depot IDs already in database", existingDepotIds.Count );
+                    hasApiKey = true;
                 }
                 else
                 {
-                    Console.WriteLine( "Failed to fetch depot IDs from API, will dump all depots" );
+                    Console.WriteLine( "Failed to fetch depot IDs from API - API key may be invalid" );
+                    Console.Write( "Continue dumping without API key filtering? (yes/no): " );
+                    string response = Console.ReadLine()?.Trim().ToLower();
+                    
+                    if ( response != "yes" && response != "y" )
+                    {
+                        Console.WriteLine( "Exiting..." );
+                        return 1;
+                    }
+                    
+                    Console.WriteLine( "Continuing without API key filtering..." );
+                    existingDepotIds = null;
                 }
             }
 
@@ -60,30 +73,27 @@ namespace DepotDumper
                 Console.Write( "Username: " );
                 user = Console.ReadLine();
 
-                if ( !string.IsNullOrWhiteSpace( user ) )
+                if ( string.IsNullOrWhiteSpace( user ) )
                 {
-                    do
-                    {
-                        Console.Write( "Password: " );
-                        if ( Console.IsInputRedirected )
-                        {
-                            password = Console.ReadLine();
-                        }
-                        else
-                        {
-                            // Avoid console echoing of password
-                            password = Util.ReadPassword();
-                        }
+                    Console.WriteLine( "Username is required. Anonymous login is not supported." );
+                    return 1;
+                }
 
-                        Console.WriteLine();
-                    } while ( string.Empty == password );
-                }
-                else
+                do
                 {
-                    // Login anonymously.
-                    user = null;
-                    password = null;
-                }
+                    Console.Write( "Password: " );
+                    if ( Console.IsInputRedirected )
+                    {
+                        password = Console.ReadLine();
+                    }
+                    else
+                    {
+                        // Avoid console echoing of password
+                        password = Util.ReadPassword();
+                    }
+
+                    Console.WriteLine();
+                } while ( string.Empty == password );
             }
 
             AccountSettingsStore.LoadFromFile( "xxx" );
@@ -104,25 +114,15 @@ namespace DepotDumper
                 return 1;
             }
 
-            IEnumerable<uint> licenseQuery;
-            if ( steam3.steamUser.SteamID.AccountType == EAccountType.AnonUser )
-            {
-                licenseQuery = new List<uint>() { 17906 };
-            }
-            else
-            {
-                Console.WriteLine( "Getting licenses..." );
-                steam3.WaitUntilCallback( () => { }, () => { return steam3.Licenses != null; } );
-                licenseQuery = steam3.Licenses.Select( x => x.PackageID ).Distinct();
-            }
+            Console.WriteLine( "Getting licenses..." );
+            steam3.WaitUntilCallback( () => { }, () => { return steam3.Licenses != null; } );
+            var licenseQuery = steam3.Licenses.Select( x => x.PackageID ).Distinct();
 
             await steam3.RequestPackageInfo( licenseQuery );
 
             if ( Config.TargetAppId == uint.MaxValue )
             {
-                string filenameUser = ( steam3.steamUser.SteamID.AccountType != EAccountType.AnonUser ) ? user : "anon";
-
-                StreamWriter sw_pkgs = new StreamWriter( string.Format( "{0}_pkgs.txt", filenameUser ) );
+                StreamWriter sw_pkgs = new StreamWriter( string.Format( "{0}_pkgs.txt", user ) );
                 sw_pkgs.AutoFlush = true;
 
                 // Collect all apps user owns.
@@ -143,11 +143,11 @@ namespace DepotDumper
 
                 sw_pkgs.Close();
 
-                StreamWriter sw_apps = new StreamWriter( string.Format( "{0}_apps.txt", filenameUser ) );
+                StreamWriter sw_apps = new StreamWriter( string.Format( "{0}_apps.txt", user ) );
                 sw_apps.AutoFlush = true;
-                StreamWriter sw_keys = new StreamWriter( string.Format( "{0}_keys.txt", filenameUser ) );
+                StreamWriter sw_keys = new StreamWriter( string.Format( "{0}_keys.txt", user ) );
                 sw_keys.AutoFlush = true;
-                StreamWriter sw_appnames = new StreamWriter( string.Format( "{0}_appnames.txt", filenameUser ) );
+                StreamWriter sw_appnames = new StreamWriter( string.Format( "{0}_appnames.txt", user ) );
                 sw_appnames.AutoFlush = true;
 
                 await steam3.RequestAppInfoList( apps );
@@ -168,8 +168,15 @@ namespace DepotDumper
                 sw_appnames.Close();
 
                 Console.WriteLine( "\n=== Summary ===" );
-                Console.WriteLine( "Dumped: {0} new depot keys", dumpedCount );
-                Console.WriteLine( "Skipped: {0} depot keys (already in database)", skippedCount );
+                if ( hasApiKey )
+                {
+                    Console.WriteLine( "Dumped: {0} new depot keys", dumpedCount );
+                    Console.WriteLine( "Skipped: {0} depot keys (already in database)", skippedCount );
+                }
+                else
+                {
+                    Console.WriteLine( "Dumped: {0} depot keys", dumpedCount );
+                }
             }
             else
             {
@@ -188,8 +195,15 @@ namespace DepotDumper
                     sw_appnames.Close();
 
                     Console.WriteLine( "\n=== Summary ===" );
-                    Console.WriteLine( "Dumped: {0} new depot keys", result.dumped );
-                    Console.WriteLine( "Skipped: {0} depot keys (already in database)", result.skipped );
+                    if ( hasApiKey )
+                    {
+                        Console.WriteLine( "Dumped: {0} new depot keys", result.dumped );
+                        Console.WriteLine( "Skipped: {0} depot keys (already in database)", result.skipped );
+                    }
+                    else
+                    {
+                        Console.WriteLine( "Dumped: {0} depot keys", result.dumped );
+                    }
                 }
             }
 
@@ -227,15 +241,15 @@ namespace DepotDumper
                     return null;
                 }
 
-                Console.WriteLine( "API: {0} existing in DB, {1} missing (as of {2})",
-                    apiResponse.existing_count, apiResponse.depot_ids, apiResponse.timestamp );
+                Console.WriteLine( "API: {0} existing in DB (as of {1})",
+                    apiResponse.existing_count, apiResponse.timestamp );
 
 
                 var existingIds = new HashSet<uint>();
 
-                if ( apiResponse.depot_ids != null )
+                if ( apiResponse.existing_depot_ids != null )
                 {
-                    foreach ( var depotIdStr in apiResponse.depot_ids )
+                    foreach ( var depotIdStr in apiResponse.existing_depot_ids )
                     {
                         if ( uint.TryParse( depotIdStr, out uint depotId ) )
                         {
@@ -387,7 +401,6 @@ namespace DepotDumper
                 uint workshopDepotId = depotInfo["workshopdepot"].AsUnsignedInteger();
                 if ( workshopDepotId != 0 && !depots.Contains( workshopDepotId ) )
                 {
-                    // ПРОВЕРКА: Workshop depot УЖЕ ЕСТЬ в базе?
                     if ( existingDepotIds != null && existingDepotIds.Contains( workshopDepotId ) )
                     {
                         Console.WriteLine( "Workshop depot {0} already exists in database, skipping", workshopDepotId );
@@ -405,7 +418,7 @@ namespace DepotDumper
                             sw_keys.WriteLine( "{0};{1}", workshopDepotId, string.Concat( workshopKey.Select( b => b.ToString( "X2" ) ).ToArray() ) );
                             depots.Add( workshopDepotId );
                             sw_appnames.WriteLine( "\t{0} (workshop)", workshopDepotId );
-                            Console.WriteLine( "Dumped NEW workshop depot key for depot {0}", workshopDepotId );
+                            Console.WriteLine( "Dumped workshop depot key for depot {0}", workshopDepotId );
                             dumpedCount++;
                         }
                     }
