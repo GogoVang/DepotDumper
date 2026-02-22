@@ -168,10 +168,14 @@ namespace DepotDumper
                 sw_appnames.Close();
 
                 Console.WriteLine( "\n=== Summary ===" );
-                Console.WriteLine( "Dumped: {0} new depot keys", dumpedCount );
                 if ( hasApiKey )
                 {
+                    Console.WriteLine( "Dumped: {0} new depot keys", dumpedCount );
                     Console.WriteLine( "Skipped: {0} depot keys (already in database)", skippedCount );
+                }
+                else
+                {
+                    Console.WriteLine( "Dumped: {0} depot keys", dumpedCount );
                 }
             }
             else
@@ -191,10 +195,14 @@ namespace DepotDumper
                     sw_appnames.Close();
 
                     Console.WriteLine( "\n=== Summary ===" );
-                    Console.WriteLine( "Dumped: {0} new depot keys", result.dumped );
                     if ( hasApiKey )
                     {
+                        Console.WriteLine( "Dumped: {0} new depot keys", result.dumped );
                         Console.WriteLine( "Skipped: {0} depot keys (already in database)", result.skipped );
+                    }
+                    else
+                    {
+                        Console.WriteLine( "Dumped: {0} depot keys", result.dumped );
                     }
                 }
             }
@@ -454,4 +462,3 @@ namespace DepotDumper
         }
     }
 }
-
