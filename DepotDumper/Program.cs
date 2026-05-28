@@ -217,7 +217,7 @@ namespace DepotDumper
         {
             try
             {
-                string url = $"https://manifest.morrenus.xyz/api/v1/depot-keys?api_key={apiKey}";
+                string url = $"https://hubcapmanifest.com/api/v1/depot-keys?api_key={apiKey}";
 
                 var response = await httpClient.GetAsync( url );
 
