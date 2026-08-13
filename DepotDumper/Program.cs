@@ -55,10 +55,11 @@ namespace DepotDumper
                 else
                 {
                     Console.WriteLine( "Failed to fetch depot IDs from API - API key may be invalid" );
-                    Console.Write( "Continue dumping without API key filtering? (yes/no): " );
-                    string response = Console.ReadLine()?.Trim().ToLower();
+                    Console.Write( "Continue dumping without API key filtering? (y/n): " );
+                    var keyInfo = Console.ReadKey(intercept: true);
+                    Console.WriteLine();
                     
-                    if ( response != "yes" && response != "y" )
+                    if ( keyInfo.Key != ConsoleKey.Y )
                     {
                         Console.WriteLine( "Exiting..." );
                         return 1;
@@ -123,7 +124,9 @@ namespace DepotDumper
 
             if ( Config.TargetAppId == uint.MaxValue )
             {
-                StreamWriter sw_pkgs = new StreamWriter( string.Format( "{0}_pkgs.txt", user ) );
+                long unixTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+                StreamWriter sw_pkgs = new StreamWriter( $"{unixTime}_pkgs.txt" );
                 sw_pkgs.AutoFlush = true;
 
                 // Collect all apps user owns.
@@ -144,11 +147,16 @@ namespace DepotDumper
 
                 sw_pkgs.Close();
 
-                StreamWriter sw_apps = new StreamWriter( string.Format( "{0}_apps.txt", user ) );
+                string appsFileName = $"{unixTime}_apps.txt";
+                StreamWriter sw_apps = new StreamWriter( appsFileName );
                 sw_apps.AutoFlush = true;
-                StreamWriter sw_keys = new StreamWriter( string.Format( "{0}_keys.txt", user ) );
+                
+                string keysFileName = $"{unixTime}_keys.txt";
+                StreamWriter sw_keys = new StreamWriter( keysFileName );
                 sw_keys.AutoFlush = true;
-                StreamWriter sw_appnames = new StreamWriter( string.Format( "{0}_appnames.txt", user ) );
+                
+                string appnamesFileName = $"{unixTime}_appnames.txt";
+                StreamWriter sw_appnames = new StreamWriter( appnamesFileName );
                 sw_appnames.AutoFlush = true;
 
                 await steam3.RequestAppInfoList( apps );
@@ -178,6 +186,43 @@ namespace DepotDumper
                 {
                     Console.WriteLine( "Dumped: {0} depot keys", dumpedCount );
                 }
+
+                if ( !string.IsNullOrWhiteSpace( apiKey ) && dumpedCount > 0 )
+                {
+                    Console.Write( $"\nDo you want to upload {dumpedCount} new keys to Hubcap? (y/n): " );
+                    var keyInfo = Console.ReadKey(intercept: true);
+                    Console.WriteLine();
+                    
+                    if ( keyInfo.Key == ConsoleKey.Y )
+                    {
+                        var generatedFiles = new List<string>
+                        {
+                            keysFileName,
+                            appsFileName
+                        };
+
+                        foreach ( var file in generatedFiles )
+                        {
+                            string fileName = Path.GetFileName(file);
+                            Console.WriteLine( $"Uploading {fileName}..." );
+                            
+                            var uploadResult = await UploadFileToServer( file, apiKey );
+                            
+                            if (uploadResult.Success)
+                            {
+                                Console.WriteLine( $"✅ {fileName}: {uploadResult.Message}" );
+                            }
+                            else
+                            {
+                                Console.WriteLine( $"❌ {fileName}: {uploadResult.Message}" );
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine( "Upload skipped." );
+                    }
+                }
             }
             else
             {
@@ -185,9 +230,14 @@ namespace DepotDumper
 
                 if ( steam3.AppTokens.ContainsKey( Config.TargetAppId ) )
                 {
-                    StreamWriter sw_apps = new StreamWriter( string.Format( "app_{0}_token.txt", Config.TargetAppId ) );
-                    StreamWriter sw_keys = new StreamWriter( string.Format( "app_{0}_keys.txt", Config.TargetAppId ) );
-                    StreamWriter sw_appnames = new StreamWriter( string.Format( "app_{0}_names.txt", Config.TargetAppId ) );
+                    string appsFileName = string.Format( "app_{0}_token.txt", Config.TargetAppId );
+                    StreamWriter sw_apps = new StreamWriter( appsFileName );
+                    
+                    string keysFileName = string.Format( "app_{0}_keys.txt", Config.TargetAppId );
+                    StreamWriter sw_keys = new StreamWriter( keysFileName );
+                    
+                    string appnamesFileName = string.Format( "app_{0}_names.txt", Config.TargetAppId );
+                    StreamWriter sw_appnames = new StreamWriter( appnamesFileName );
 
                     var result = await DumpApp( Config.TargetAppId, licenseQuery, sw_apps, sw_keys, sw_appnames, new List<uint>(), existingDepotIds );
 
@@ -205,12 +255,111 @@ namespace DepotDumper
                     {
                         Console.WriteLine( "Dumped: {0} depot keys", result.dumped );
                     }
+
+                    if ( !string.IsNullOrWhiteSpace( apiKey ) && result.dumped > 0 )
+                    {
+                        Console.Write( $"\nDo you want to upload {result.dumped} new keys to Hubcap? (y/n): " );
+                        var keyInfo = Console.ReadKey(intercept: true);
+                        Console.WriteLine();
+                        
+                        if ( keyInfo.Key == ConsoleKey.Y )
+                        {
+                            var generatedFiles = new List<string>
+                            {
+                                keysFileName,
+                                appsFileName
+                            };
+
+                            foreach ( var file in generatedFiles )
+                            {
+                                string fileName = Path.GetFileName(file);
+                                Console.WriteLine( $"Uploading {fileName}..." );
+                                
+                                var uploadResult = await UploadFileToServer( file, apiKey );
+                                
+                                if (uploadResult.Success)
+                                {
+                                    Console.WriteLine( $"✅ {fileName}: {uploadResult.Message}" );
+                                }
+                                else
+                                {
+                                    Console.WriteLine( $"❌ {fileName}: {uploadResult.Message}" );
+                                }
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine( "Upload skipped." );
+                        }
+                    }
                 }
             }
 
             steam3.Disconnect();
 
             return 0;
+        }
+
+        private static async Task<(bool Success, string Message)> UploadFileToServer(string filePath, string apiKey)
+        {
+            using (var uploadClient = new HttpClient())
+            {
+                uploadClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+
+                using (var form = new MultipartFormDataContent())
+                {
+                    var fileContent = new ByteArrayContent(File.ReadAllBytes(filePath));
+                    fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain");
+
+                    string fileName = Path.GetFileName(filePath);
+                    form.Add(fileContent, "file", fileName);
+
+                    try
+                    {
+                        var response = await uploadClient.PostAsync("https://hubcapmanifest.com/api/v1/upload", form);
+                        var responseString = await response.Content.ReadAsStringAsync();
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            using (var doc = JsonDocument.Parse(responseString))
+                            {
+                                var root = doc.RootElement;
+                                int validLines = root.TryGetProperty("valid_lines", out var vlProp) && vlProp.ValueKind == JsonValueKind.Number ? vlProp.GetInt32() : 0;
+                                int invalidLines = root.TryGetProperty("invalid_lines_removed", out var ilProp) && ilProp.ValueKind == JsonValueKind.Number ? ilProp.GetInt32() : 0;
+
+                                string message = $"Uploaded ({validLines} valid lines";
+                                if (invalidLines > 0)
+                                {
+                                    message += $", {invalidLines} invalid removed";
+                                }
+                                message += ")";
+
+                                return (true, message);
+                            }
+                        }
+                        else
+                        {
+                            try
+                            {
+                                using (var doc = JsonDocument.Parse(responseString))
+                                {
+                                    var root = doc.RootElement;
+                                    string errorDetail = root.TryGetProperty("detail", out var dProp) ? dProp.GetString() : $"HTTP {response.StatusCode}";
+                                    return (false, errorDetail);
+                                }
+                            }
+                            catch
+                            {
+                                return (false, $"HTTP {response.StatusCode}: {responseString}");
+                            }
+                        }
+                    }
+                    catch (HttpRequestException ex)
+                    {
+                        return (false, $"Network error: {ex.Message}");
+                    }
+                }
+            }
         }
 
         static async Task<HashSet<uint>> FetchExistingDepotIds( string apiKey )
@@ -463,4 +612,3 @@ namespace DepotDumper
         }
     }
 }
-
