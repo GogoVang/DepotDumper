@@ -185,23 +185,42 @@ namespace DepotDumper
                     Console.WriteLine( "Dumped: {0} depot keys", dumpedCount );
                 }
 
-                if ( !string.IsNullOrWhiteSpace( apiKey ) && dumpedCount > 0 )
-                {
-                    Console.Write( $"\nDo you want to upload {dumpedCount} new keys to Hubcap? (y/n): " );
-                    var keyInfo = Console.ReadKey(intercept: true);
-                    Console.WriteLine(); 
-                    
-                    if ( keyInfo.Key == ConsoleKey.Y )
-                    {
-                        Console.WriteLine( $"Uploading {keysFileName} to Hubcap..." );
-                        var uploadResult = await UploadFileToServer( keysFileName, apiKey );
-                        Console.WriteLine( uploadResult.Success ? $"Success: {uploadResult.Message}" : $"Error: {uploadResult.Message}" );
-                    }
-                    else
-                    {
-                        Console.WriteLine( "Upload skipped." );
-                    }
-                }
+				if ( !string.IsNullOrWhiteSpace( apiKey ) && dumpedCount > 0 ) // (или result.dumped > 0 для одиночного)
+				{
+					Console.Write( $"\nDo you want to upload {dumpedCount} new keys to Hubcap? (y/n): " );
+					var keyInfo = Console.ReadKey(intercept: true);
+					Console.WriteLine();
+					
+					if ( keyInfo.Key == ConsoleKey.Y )
+					{
+						var generatedFiles = new List<string>
+						{
+							keysFileName,
+							appsFileName
+						};
+
+						foreach ( var file in generatedFiles )
+						{
+							string fileName = Path.GetFileName(file);
+							Console.WriteLine( $"Uploading {fileName}..." );
+							
+							var uploadResult = await UploadFileToServer( file, apiKey );
+							
+							if (uploadResult.Success)
+							{
+								Console.WriteLine( $"✅ {fileName}: {uploadResult.Message}" );
+							}
+							else
+							{
+								Console.WriteLine( $"❌ {fileName}: {uploadResult.Message}" );
+							}
+						}
+					}
+					else
+					{
+						Console.WriteLine( "Upload skipped." );
+					}
+				}
             }
             else
             {
@@ -239,13 +258,17 @@ namespace DepotDumper
                     {
                         Console.Write( $"\nDo you want to upload {result.dumped} new keys to Hubcap? (y/n): " );
                         var keyInfo = Console.ReadKey(intercept: true);
-                        Console.WriteLine(); 
+                        Console.WriteLine();
                         
                         if ( keyInfo.Key == ConsoleKey.Y )
                         {
                             Console.WriteLine( $"Uploading {keysFileName} to Hubcap..." );
-                            var uploadResult = await UploadFileToServer( keysFileName, apiKey );
-                            Console.WriteLine( uploadResult.Success ? $"Success: {uploadResult.Message}" : $"Error: {uploadResult.Message}" );
+                            var uploadKeysResult = await UploadFileToServer( keysFileName, apiKey );
+                            Console.WriteLine( uploadKeysResult.Success ? $"Keys Success: {uploadKeysResult.Message}" : $"Keys Error: {uploadKeysResult.Message}" );
+                            
+                            Console.WriteLine( $"Uploading {appsFileName} to Hubcap..." );
+                            var uploadAppsResult = await UploadFileToServer( appsFileName, apiKey );
+                            Console.WriteLine( uploadAppsResult.Success ? $"Apps Success: {uploadAppsResult.Message}" : $"Apps Error: {uploadAppsResult.Message}" );
                         }
                         else
                         {
@@ -276,7 +299,7 @@ namespace DepotDumper
 
                     try
                     {
-                        var response = await uploadClient.PostAsync("https://hubcap.com/api/v1/upload", form);
+                        var response = await uploadClient.PostAsync("https://hubcapmanifest.com/api/v1/upload", form);
                         var responseString = await response.Content.ReadAsStringAsync();
 
                         if (response.IsSuccessStatusCode)
