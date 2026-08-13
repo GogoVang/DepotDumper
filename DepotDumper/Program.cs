@@ -124,7 +124,9 @@ namespace DepotDumper
 
             if ( Config.TargetAppId == uint.MaxValue )
             {
-                StreamWriter sw_pkgs = new StreamWriter( string.Format( "{0}_pkgs.txt", user ) );
+                long unixTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+                StreamWriter sw_pkgs = new StreamWriter( $"{unixTime}_pkgs.txt" );
                 sw_pkgs.AutoFlush = true;
 
                 // Collect all apps user owns.
@@ -145,15 +147,15 @@ namespace DepotDumper
 
                 sw_pkgs.Close();
 
-                string appsFileName = string.Format( "{0}_apps.txt", user );
+                string appsFileName = $"{unixTime}_apps.txt";
                 StreamWriter sw_apps = new StreamWriter( appsFileName );
                 sw_apps.AutoFlush = true;
                 
-                string keysFileName = string.Format( "{0}_keys.txt", user );
+                string keysFileName = $"{unixTime}_keys.txt";
                 StreamWriter sw_keys = new StreamWriter( keysFileName );
                 sw_keys.AutoFlush = true;
                 
-                string appnamesFileName = string.Format( "{0}_appnames.txt", user );
+                string appnamesFileName = $"{unixTime}_appnames.txt";
                 StreamWriter sw_appnames = new StreamWriter( appnamesFileName );
                 sw_appnames.AutoFlush = true;
 
@@ -185,42 +187,42 @@ namespace DepotDumper
                     Console.WriteLine( "Dumped: {0} depot keys", dumpedCount );
                 }
 
-				if ( !string.IsNullOrWhiteSpace( apiKey ) && dumpedCount > 0 ) // (или result.dumped > 0 для одиночного)
-				{
-					Console.Write( $"\nDo you want to upload {dumpedCount} new keys to Hubcap? (y/n): " );
-					var keyInfo = Console.ReadKey(intercept: true);
-					Console.WriteLine();
-					
-					if ( keyInfo.Key == ConsoleKey.Y )
-					{
-						var generatedFiles = new List<string>
-						{
-							keysFileName,
-							appsFileName
-						};
+                if ( !string.IsNullOrWhiteSpace( apiKey ) && dumpedCount > 0 )
+                {
+                    Console.Write( $"\nDo you want to upload {dumpedCount} new keys to Hubcap? (y/n): " );
+                    var keyInfo = Console.ReadKey(intercept: true);
+                    Console.WriteLine();
+                    
+                    if ( keyInfo.Key == ConsoleKey.Y )
+                    {
+                        var generatedFiles = new List<string>
+                        {
+                            keysFileName,
+                            appsFileName
+                        };
 
-						foreach ( var file in generatedFiles )
-						{
-							string fileName = Path.GetFileName(file);
-							Console.WriteLine( $"Uploading {fileName}..." );
-							
-							var uploadResult = await UploadFileToServer( file, apiKey );
-							
-							if (uploadResult.Success)
-							{
-								Console.WriteLine( $"✅ {fileName}: {uploadResult.Message}" );
-							}
-							else
-							{
-								Console.WriteLine( $"❌ {fileName}: {uploadResult.Message}" );
-							}
-						}
-					}
-					else
-					{
-						Console.WriteLine( "Upload skipped." );
-					}
-				}
+                        foreach ( var file in generatedFiles )
+                        {
+                            string fileName = Path.GetFileName(file);
+                            Console.WriteLine( $"Uploading {fileName}..." );
+                            
+                            var uploadResult = await UploadFileToServer( file, apiKey );
+                            
+                            if (uploadResult.Success)
+                            {
+                                Console.WriteLine( $"✅ {fileName}: {uploadResult.Message}" );
+                            }
+                            else
+                            {
+                                Console.WriteLine( $"❌ {fileName}: {uploadResult.Message}" );
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine( "Upload skipped." );
+                    }
+                }
             }
             else
             {
@@ -262,13 +264,28 @@ namespace DepotDumper
                         
                         if ( keyInfo.Key == ConsoleKey.Y )
                         {
-                            Console.WriteLine( $"Uploading {keysFileName} to Hubcap..." );
-                            var uploadKeysResult = await UploadFileToServer( keysFileName, apiKey );
-                            Console.WriteLine( uploadKeysResult.Success ? $"Keys Success: {uploadKeysResult.Message}" : $"Keys Error: {uploadKeysResult.Message}" );
-                            
-                            Console.WriteLine( $"Uploading {appsFileName} to Hubcap..." );
-                            var uploadAppsResult = await UploadFileToServer( appsFileName, apiKey );
-                            Console.WriteLine( uploadAppsResult.Success ? $"Apps Success: {uploadAppsResult.Message}" : $"Apps Error: {uploadAppsResult.Message}" );
+                            var generatedFiles = new List<string>
+                            {
+                                keysFileName,
+                                appsFileName
+                            };
+
+                            foreach ( var file in generatedFiles )
+                            {
+                                string fileName = Path.GetFileName(file);
+                                Console.WriteLine( $"Uploading {fileName}..." );
+                                
+                                var uploadResult = await UploadFileToServer( file, apiKey );
+                                
+                                if (uploadResult.Success)
+                                {
+                                    Console.WriteLine( $"✅ {fileName}: {uploadResult.Message}" );
+                                }
+                                else
+                                {
+                                    Console.WriteLine( $"❌ {fileName}: {uploadResult.Message}" );
+                                }
+                            }
                         }
                         else
                         {
