@@ -427,7 +427,7 @@ namespace DepotDumper
                                 Password = logonDetails.Password,
                                 IsPersistentSession = Program.Config.RememberPassword,
                                 GuardData = guarddata,
-                                Authenticator = new UserConsoleAuthenticator(),
+                                Authenticator = new ConsoleAuthenticator(),
                             });
                         }
                         catch (TaskCanceledException)

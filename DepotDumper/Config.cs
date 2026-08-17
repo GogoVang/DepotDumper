@@ -13,5 +13,6 @@ namespace DepotDumper
         public bool DumpUnreleased { get; set; }
         public uint TargetAppId { get; set; }
         public bool UseQrCode { get; set; }
+        public bool NoMobile { get; set; }
     }
 }
