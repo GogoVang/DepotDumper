@@ -34,6 +34,7 @@ namespace DepotDumper
             string user = null;
             string password = null;
             Config.UseQrCode = HasParameter( args, "-qr" );
+            Config.NoMobile = HasParameter( args, "-no-mobile" );
             Config.RememberPassword = false;
             Config.TargetAppId = GetParameter<uint>( args, "-app", uint.MaxValue );
             Config.DumpUnreleased = HasParameter( args, "-dump-unreleased" );

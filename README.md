@@ -23,3 +23,4 @@ Optional parameters:
 * -app \<#> - dump keys for a specific app.
 * -apikey \<key> - fetch existing depot IDs from a database to avoid re-dumping keys that are already there.
 * -dump-unreleased - apps that don't have "released" status are skipped by default to prevent accidental leaks, add this parameter to override this behavior.
+* -no-mobile - prefer entering a 2FA code instead of prompting to accept in the Steam mobile app. Should be used if you imported maFiles from the official Steam app.
