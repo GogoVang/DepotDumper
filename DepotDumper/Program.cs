@@ -31,6 +31,19 @@ namespace DepotDumper
 
         static async Task<int> Main( string[] args )
         {
+            if ( HasParameter( args, "-help" ) || HasParameter( args, "--help" ) || HasParameter( args, "-h" ) || HasParameter( args, "/?" ) )
+            {
+                Console.WriteLine( "Mass depot key dumper utilizing the SteamKit2 library. Supports .NET 9.0\n" );
+                Console.WriteLine( "Optional parameters:" );
+                Console.WriteLine( "  -app <#>           - dump keys for a specific app." );
+                Console.WriteLine( "  -apikey <key>      - fetch existing depot IDs from a database to avoid re-dumping keys that are already there." );
+                Console.WriteLine( "  -dump-unreleased   - apps that don't have \"released\" status are skipped by default to prevent accidental leaks, add this parameter to override this behavior." );
+                Console.WriteLine( "  -no-mobile         - prefer entering a 2FA code instead of prompting to accept in the Steam mobile app. Should be used if you imported maFiles from the official Steam app." );
+                Console.WriteLine( "  -qr                - display a login QR code to be scanned with the Steam mobile app." );
+                Console.WriteLine( "  -help, -h          - display this help message." );
+                return 0; 
+            }
+
             string user = null;
             string password = null;
             Config.UseQrCode = HasParameter( args, "-qr" );
